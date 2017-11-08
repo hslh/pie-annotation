@@ -14,12 +14,18 @@ parser.add_argument('corpus', metavar = 'DIRECTORY', type = str, help = "Specify
 args = parser.parse_args()
 
 # Read in PIEs
-dev = json.load(open('PIE_annotations_dev_no_sentences.json', 'r'))
-test = json.load(open('PIE_annotations_test_no_sentences.json', 'r'))
 full = json.load(open('PIE_annotations_all_no_sentences.json', 'r'))
-dev_documents = list(set([PIE['document_id'] for PIE in dev]))
-test_documents = list(set([PIE['document_id'] for PIE in test]))
 full_documents = list(set([PIE['document_id'] for PIE in full]))
+doc_dev = json.load(open('PIE_annotations_doc_dev_no_sentences.json', 'r'))
+doc_test = json.load(open('PIE_annotations_doc_test_no_sentences.json', 'r'))
+dev_documents = list(set([PIE['document_id'] for PIE in doc_dev]))
+test_documents = list(set([PIE['document_id'] for PIE in doc_test]))
+type_train = json.load(open('PIE_annotations_type_train_no_sentences.json', 'r'))
+type_dev = json.load(open('PIE_annotations_type_dev_no_sentences.json', 'r'))
+type_test = json.load(open('PIE_annotations_type_test_no_sentences.json', 'r'))
+train_types = list(set([PIE['idiom'] for PIE in type_train]))
+dev_types = list(set([PIE['idiom'] for PIE in type_dev]))
+test_types = list(set([PIE['idiom'] for PIE in type_test]))
 
 # Read in BNC documents, extract context to add
 subdirectories = sorted(os.listdir(args.corpus))
@@ -66,10 +72,16 @@ for subdirectory in subdirectories:
 								PIE['sentence'] = pre_context + ' ' + PIE_sentence + ' ' + post_context
 
 # Get dev and test set
-dev = [PIE for PIE in full if PIE['document_id'] in dev_documents]
-test = [PIE for PIE in full if PIE['document_id'] in test_documents]
+doc_dev = [PIE for PIE in full if PIE['document_id'] in dev_documents]
+doc_test = [PIE for PIE in full if PIE['document_id'] in test_documents]
+type_train = [PIE for PIE in full if PIE['idiom'] in train_types]
+type_dev = [PIE for PIE in full if PIE['idiom'] in dev_types]
+type_test = [PIE for PIE in full if PIE['idiom'] in test_types]
 
 # Output PIEs with sentence contest
-json.dump(dev, open('PIE_annotations_dev.json', 'w'))
-json.dump(test, open('PIE_annotations_test.json', 'w'))
 json.dump(full, open('PIE_annotations_all.json', 'w'))
+json.dump(doc_dev, open('PIE_annotations_doc_dev.json', 'w'))
+json.dump(doc_test, open('PIE_annotations_doc_test.json', 'w'))
+json.dump(type_train, open('PIE_annotations_type_train.json', 'w'))
+json.dump(type_dev, open('PIE_annotations_type_dev.json', 'w'))
+json.dump(type_test, open('PIE_annotations_type_test.json', 'w'))
