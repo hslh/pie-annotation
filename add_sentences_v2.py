@@ -53,14 +53,14 @@ for subdirectory in subdirectories:
 						for sentence in parsed_xml.find_all('s'):
 							sentence_number = unicode(sentence['n'])
 							sentence_string = ''
-							sentence_string_tok = []
+							sentence_string_tokenized = []
 							for descendant in sentence.descendants:
 								if descendant.name in ['c', 'w']:
 									sentence_string += unicode(descendant.string)
-									sentence_string_tok.append(unicode(descendant.string).strip())
-							sentence_string_tok = ' '.join(sentence_string_tok)
+									sentence_string_tokenized.append(unicode(descendant.string).strip())
+							sentence_string_tokenized = ' '.join(sentence_string_tokenized)
 							# Store sentences
-							document_sentences.append((sentence_number, sentence_string, sentence_string_tok))
+							document_sentences.append((sentence_number, sentence_string, sentence_string_tokenized))
 						# Add sentence context
 						for PIE in full:
 							if PIE['document_id'] == document_id[:-4]:
@@ -70,63 +70,59 @@ for subdirectory in subdirectories:
 									if PIE['sentence_number'] == document_sentence[0]:
 										sentence_index = idx
 										PIE_sentence = document_sentence[1]
-										PIE_sentence_tok = document_sentence[2]
+										PIE_sentence_tokenized = document_sentence[2]
 								# Take 2 additional sentences of context, avoid going outside of document boundaries, add padding in those cases
 								pre_context = document_sentences[max(0, sentence_index - 2):sentence_index]
 								pre_padding = 2 - len(pre_context)
 								pre_context = pre_padding * [(u'', u'', u'')] + pre_context
+								pre_context_tokenized = [pre_context_sentence[2] for pre_context_sentence in pre_context]
+								pre_context = [pre_context_sentence[1] for pre_context_sentence in pre_context]
 								post_context = document_sentences[sentence_index + 1:min(sentence_index + 3, len(document_sentences) - 1)]
 								post_padding = 2 - len(post_context)
 								post_context += post_padding * [(u'', u'', u'')]
-								pre_context_tok = [pre_context_sentence[2] for pre_context_sentence in pre_context]
-								post_context_tok = [post_context_sentence[2] for post_context_sentence in post_context]	
-								pre_context = [pre_context_sentence[1] for pre_context_sentence in pre_context]
-								post_context = [post_context_sentence[1] for post_context_sentence in post_context]							
-								PIE['context'] = pre_context + [PIE_sentence] + post_context
-								PIE['context_tokenized'] = pre_context_tok + [PIE_sentence_tok] + post_context_tok
-								# Correct offsets
-								if len(PIE['context']) == 5:
-									# Adjust offsets by n, taking into account pre-padding length
-									adjustment = len(' '.join(PIE['context'][:2])) + 1 - pre_padding
-									new_offsets = [[offset[0] - adjustment, offset[1] - adjustment] for offset in PIE['offsets']]
-									# Sort offsets so that they follow word order
-									new_offsets = sorted(new_offsets, key = lambda x: x[0])
-									# Convert from offsets on untokenized context to offsets on tokenized context
-									# Conversion idea: count number of non-whitespace characters in snippet before offset start
-									tok_offsets = []
-									for pair in new_offsets:
-										tok_pair = []
-										len_un = len(re.sub(r'\s', '', PIE_sentence[:pair[0]]))
-										len_tok = len(re.sub(r'\s', '', PIE_sentence_tok[:pair[0]]))
-										if len_tok <= len_un:
-											r = range(0,30,1)
-										else:
-											r = range(-29,1,1)
-										for i in r:
-											if len(re.sub(r'\s', '', PIE_sentence_tok[:pair[0] + i])) == len_un:
-												tok_pair = [o + i for o in pair]
-										tok_offsets.append(tok_pair)
-									# Check equivalence of untokenized and tokenized offsets
-									old_snippet = PIE_sentence[new_offsets[0][0]:new_offsets[-1][-1]]
-									new_snippet = PIE_sentence_tok[tok_offsets[0][0]:tok_offsets[-1][-1]]
-									if re.sub(r'\s', '', old_snippet) != re.sub(r'\s', '', new_snippet):
-										# Some manual corrections for very special cases
-										if new_snippet == u'n Home Run ':
-											tok_offsets = [[42,44], [50, 53]]
-										elif new_snippet == u'to manufacture CCCP T-':
-											tok_offsets = [[35,37], [55,56]]
-										elif new_snippet == u'carry Government health warnings , so why ca ':
-											tok_offsets = [[49,54], [91,93]]
-										else:
-											import ipdb; ipdb.set_trace()
-									# Check manual corrections
-									ID = '{0}-{1}-{2}'.format(PIE['idiom'], PIE['document_id'], PIE['sentence_number'])
-									if ID in correction_mapping:
-										tok_offsets = correction_mapping[ID]
-									# Store new offsets
-									PIE['offsets'] = tok_offsets
-								else:
-									import ipdb; ipdb.set_trace()
+								post_context_tokenized = [post_context_sentence[2] for post_context_sentence in post_context]
+								post_context = [post_context_sentence[1] for post_context_sentence in post_context]
+								# Store newly extracted contexts, remove old context
+								PIE['context_untokenized'] = pre_context + [PIE_sentence] + post_context
+								PIE['context'] = pre_context_tokenized + [PIE_sentence_tokenized] + post_context_tokenized
+								del PIE['sentence']
+								# Adjust offsets by n, taking into account pre-padding length
+								adjustment = len(' '.join(PIE['context_untokenized'][:2])) + 1 - pre_padding
+								adjusted_offsets = [[offset[0] - adjustment, offset[1] - adjustment] for offset in PIE['offsets']]
+								# Sort offsets so that they follow word order
+								adjusted_offsets = sorted(adjusted_offsets, key = lambda x: x[0])
+								# Convert from offsets on untokenized context to offsets on tokenized context by counting non-whitespace characters
+								tokenized_offsets = []
+								for pair in adjusted_offsets:
+									new_pair = []
+									len_untokenized = len(re.sub(r'\s', '', PIE_sentence[:pair[0]]))
+									len_tokenized = len(re.sub(r'\s', '', PIE_sentence_tokenized[:pair[0]]))
+									# Adjust offsets until number of non-whitespace characters matches
+									if len_tokenized <= len_untokenized:
+										r = range(0,30,1)
+									else:
+										r = range(-29,1,1)
+									for adjustment in r:
+										if len(re.sub(r'\s', '', PIE_sentence_tokenized[:pair[0] + adjustment])) == len_untokenized:
+											new_pair = [offset + adjustment for offset in pair]
+									tokenized_offsets.append(new_pair)
+								# Check equivalence of untokenized and tokenized offsets
+								old_span = PIE_sentence[adjusted_offsets[0][0]:adjusted_offsets[-1][-1]]
+								new_span = PIE_sentence_tokenized[tokenized_offsets[0][0]:tokenized_offsets[-1][-1]]
+								if re.sub(r'\s', '', old_span) != re.sub(r'\s', '', new_span):
+									# Some manual corrections for very special cases
+									if new_span == u'n Home Run ':
+										tokenized_offsets = [[42,44], [50, 53]]
+									elif new_span == u'to manufacture CCCP T-':
+										tokenized_offsets = [[35,37], [55,56]]
+									elif new_span == u'carry Government health warnings , so why ca ':
+										tokenized_offsets = [[49,54], [91,93]]
+								# Apply manual corrections if available
+								PIE_id = '{0}-{1}-{2}'.format(PIE['idiom'], PIE['document_id'], PIE['sentence_number'])
+								if PIE_id in correction_mapping:
+									tokenized_offsets = correction_mapping[PIE_id]
+								# Store new offsets
+								PIE['offsets'] = tokenized_offsets
 
 # Get dev and test set
 doc_dev = [PIE for PIE in full if PIE['document_id'] in dev_documents]
