@@ -1,4 +1,5 @@
 # Annotation Guidelines
+These guidelines were developed jointly by Hessel Haagsma, Barbara Plank, and Johan Bos.
 
 ## PIE Annotation
 
